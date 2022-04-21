@@ -1,8 +1,8 @@
 """
 An example pipeline
 """
-import os
 
+import os
 import pandas as pd
 from sklearn.compose import ColumnTransformer
 from sklearn.impute import SimpleImputer
@@ -13,9 +13,12 @@ from sklearn.preprocessing import OneHotEncoder, KBinsDiscretizer, label_binariz
 from mlinspect.utils import get_project_root
 
 train_file = os.path.join(str(get_project_root()), "example_pipelines", "compas", "compas_train.csv")
-train_data = pd.read_csv(train_file, na_values='?', index_col=0)
 test_file = os.path.join(str(get_project_root()), "example_pipelines", "compas", "compas_test.csv")
-test_data = pd.read_csv(test_file, na_values='?', index_col=0)
+
+# train_file = os.path.join(r"/home/luca/Documents/Bachelorarbeit/mlinspect/example_to_sql/data_generation/generated_csv/compas_train_generated_1000000.csv")
+# test_file = os.path.join(r"/home/luca/Documents/Bachelorarbeit/mlinspect/example_to_sql/data_generation/generated_csv/compas_test_generated_1000000.csv")
+train_data = pd.read_csv(train_file, na_values='', index_col=0)
+test_data = pd.read_csv(test_file, na_values='', index_col=0)
 
 train_data = train_data[
     ['sex', 'dob', 'age', 'c_charge_degree', 'race', 'score_text', 'priors_count', 'days_b_screening_arrest',
@@ -44,6 +47,13 @@ featurizer = ColumnTransformer(transformers=[
     ('impute1_and_onehot', impute1_and_onehot, ['is_recid']),
     ('impute2_and_bin', impute2_and_bin, ['age'])
 ])
+# Attention:
+# below lines are the same, as "y=..." only passes data trough to the NN:
+# featurizer.fit_transform(train_data, train_labels.ravel()) is equal to:
+# featurizer.fit_transform(train_data)
+# featurizer.fit_transform(train_data)
+# featurizer.fit_transform(test_data)
+
 
 pipeline = Pipeline([
     ('features', featurizer),

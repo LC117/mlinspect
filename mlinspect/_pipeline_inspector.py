@@ -9,6 +9,7 @@ from mlinspect.inspections._inspection import Inspection
 from .checks._check import Check, CheckResult
 from ._inspector_result import InspectorResult
 from .instrumentation._pipeline_executor import singleton
+from mlinspect.to_sql.dbms_connectors.dbms_connector import Connector
 
 
 class PipelineInspectorBuilder:
@@ -88,11 +89,33 @@ class PipelineInspectorBuilder:
                              checks=self.checks,
                              custom_monkey_patching=self.monkey_patching_modules)
 
+    def execute_in_sql(self, dbms_connector: Connector = None, mode="CTE",
+                       materialize=False, row_wise=False) -> InspectorResult:
+        """
+        Instrument and execute the pipeline
+        Args:
+            dbms_connector(Connector): API for operating the DBMS.
+            sql_one_run(bool): Only one inspection of entire pipeline. Faster, but does not pinpoint error.
+            mode(str): Available: "CTE" or "VIEW"
+            materialize(bool): If the mode is "VIEW" this option will tell the DBMS to materialize the interim result.
+            row_wise: Sets whether to add the mlinspect_index column.
+        """
+        assert (isinstance(dbms_connector, Connector) or dbms_connector is None)
+        return singleton.run(notebook_path=self.notebook_path,
+                             python_path=self.python_path,
+                             python_code=self.python_code,
+                             inspections=self.inspections,
+                             checks=self.checks,
+                             custom_monkey_patching=self.monkey_patching_modules,
+                             to_sql=True, dbms_connector=dbms_connector,
+                             mode=mode, materialize=materialize, row_wise=row_wise)
+
 
 class PipelineInspector:
     """
     The entry point to the fluent API to build an inspection run
     """
+
     @staticmethod
     def on_pipeline_from_py_file(path: str) -> PipelineInspectorBuilder:
         """Inspect a pipeline from a .py file."""

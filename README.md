@@ -1,21 +1,14 @@
-mlinspect
+mlinspect-SQL
 ================================
-
-[![mlinspect](https://img.shields.io/badge/🔎-mlinspect-green)](https://github.com/stefan-grafberger/mlinspect)
-[![GitHub license](https://img.shields.io/badge/License-Apache%202.0-yellowgreen.svg)](https://github.com/stefan-grafberger/mlinspect/blob/master/LICENSE)
-[![Build Status](https://github.com/stefan-grafberger/mlinspect/actions/workflows/build.yml/badge.svg)](https://github.com/stefan-grafberger/mlinspect/actions/workflows/build.yml)
-[![codecov](https://codecov.io/gh/stefan-grafberger/mlinspect/branch/master/graph/badge.svg?token=KTMNPBV1ZZ)](https://codecov.io/gh/stefan-grafberger/mlinspect)
-
-Inspect ML Pipelines in Python in the form of a DAG
+This is an SQL extension to the [mlinspect framework](https://github.com/stefan-grafberger/mlinspect) to transpile Python library functions to SQL for execution within a database system.
 
 ## Run mlinspect locally
 
-Prerequisite: Python 3.9
+Prerequisite: Python 3.8
 
 1. Clone this repository
 2. Set up the environment
 
-	`cd mlinspect` <br>
 	`python -m venv venv` <br>
 	`source venv/bin/activate` <br>
 
@@ -32,6 +25,26 @@ Prerequisite: Python 3.9
 
     `python setup.py test` <br>
     
+
+## How to use the SQL backend
+We prepared two examples, the [first](notebooks/example_to_sql/to_sql_demo_pure_pipeline.ipynb) is to demonstrate execution of machine learning pipelines only, the [second](example_to_sql/to_sql_demo_inspection.ipynb) demonstrate a full end-to-end machine learning pipeline that compares the performance of different backends.
+
+In order to run the latter one, you need a PostgreSQL database system running (at port 5432) in the background with an user `luca` with password `password` that is allowed to copy from CSV files and has access to the respective database. (https://www.postgresql.org/download/linux/ubuntu/)
+    
+    # After intalling: 
+    sudo -i -u postgres
+    psql
+
+	create user luca;
+	alter role luca with password 'password';
+	grant pg_read_server_files to luca;
+	create database healthcare_benchmark;
+	grant all privileges on database healthcare_benchmark to luca;
+
+To also run the benchmarks in Umbra, you need an Umbra server running at port 5433.
+
+For more information on the functions supported w.r.t execution outsourced to DBMS, please see [here](mlinspect/monkeypatchingSQL/README.md).
+
 ## How to use mlinspect
 mlinspect makes it easy to analyze your pipeline and automatically check for common issues.
 ```python
@@ -52,18 +65,25 @@ dag_node_to_inspection_results = inspector_result.dag_node_to_inspection_results
 check_to_check_results = inspector_result.check_to_check_results
 ```
 
-## Detailed Example
-We prepared a [demo notebook](demo/feature_overview/feature_overview.ipynb) to showcase mlinspect and its features.
+With execution outsourced to a Database Management System (DBMS):
 
-## Supported libraries and API functions
-mlinspect already supports a selection of API functions from `pandas` and `scikit-learn`. Extending mlinspect to support more and more API functions and libraries will be an ongoing effort. However, mlinspect won't just crash when it encounters functions it doesn't recognize yet. For more information, please see [here](mlinspect/monkeypatching/README.md).
+```python
+from mlinspect.to_sql.dbms_connectors.postgresql_connector import PostgresqlConnector
+from mlinspect import PipelineInspector
+from mlinspect.inspections import MaterializeFirstOutputRows
+from mlinspect.checks import NoBiasIntroducedFor
 
-## Notes
-* For debugging in PyCharm, set the pytest flag `--no-cov` ([Link](https://stackoverflow.com/questions/34870962/how-to-debug-py-test-in-pycharm-when-coverage-is-enabled))
+dbms_connector = PostgresqlConnector(...)
 
-## Publications
-* [Stefan Grafberger, Shubha Guha, Julia Stoyanovich, Sebastian Schelter (2021). mlinspect: a Data Distribution Debugger for Machine Learning Pipelines. ACM SIGMOD (demo).](https://stefan-grafberger.com/publications/mlinspect-a-data-distribution-debugger-for-machine-learning-pipelines/mlinspect-demo.pdf)
-* [Stefan Grafberger, Julia Stoyanovich, Sebastian Schelter (2020). Lightweight Inspection of Data Preprocessing in Native Machine Learning Pipelines. Conference on Innovative Data Systems Research (CIDR).](https://stefan-grafberger.com/publications/lightweight-inspection-of-data-preprocessing-in-native-machine-learning-pipelines/mlinspect-cidr.pdf)
+IPYNB_PATH = ...
 
-## License
-This library is licensed under the Apache 2.0 License.
+inspector_result = PipelineInspector\
+        .on_pipeline_from_ipynb_file(IPYNB_PATH)\
+        .add_required_inspection(MaterializeFirstOutputRows(5))\
+        .add_check(NoBiasIntroducedFor(['race']))\
+        .execute_in_sql(dbms_connector=dbms_connector, mode="VIEW", materialize=True)
+
+extracted_dag = inspector_result.dag
+dag_node_to_inspection_results = inspector_result.dag_node_to_inspection_results
+check_to_check_results = inspector_result.check_to_check_results
+```

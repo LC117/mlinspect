@@ -1,0 +1,1 @@
+SELECT (b > 1.2 * c) AS a FROM data

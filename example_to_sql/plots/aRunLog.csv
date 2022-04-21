@@ -1,0 +1,58 @@
+patients = pd.read_csv .. & histories = pd.read_csv .., 27.94814109802246, 27.94814109802246, UNKNOWN
+data = patients.merge .. , 35.645246505737305, 63.593387603759766, UNKNOWN
+complications = data.groupby .. , 10.038137435913086, 73.63152503967285, UNKNOWN
+data = data.merge(complications .. , 32.00173377990723, 105.63325881958008, UNKNOWN
+data['label'] = data['complications'] > 1.2 * data['mean_complications'], 35.56704521179199, 141.20030403137207, UNKNOWN
+data = data[['smoker', 'las .. , 44.50702667236328, 185.70733070373535, UNKNOWN
+train_test_split .. , 25.761127471923828, 211.46845817565918, UNKNOWN
+train_test_split .. , 2483.4675788879395, 2694.9360370635986, UNKNOWN
+train_test_split .. , 191.79701805114746, 2886.733055114746, UNKNOWN
+patients = pd.read_csv .. & histories = pd.read_csv .., 23.86307716369629, 23.86307716369629, UNKNOWN
+data = patients.merge .. , 35.513877868652344, 59.37695503234863, UNKNOWN
+complications = data.groupby .. , 9.90438461303711, 69.28133964538574, UNKNOWN
+data = data.merge(complications .. , 33.08701515197754, 102.36835479736328, UNKNOWN
+data['label'] = data['complications'] > 1.2 * data['mean_complications'], 36.9412899017334, 139.30964469909668, UNKNOWN
+data = data[['smoker', 'las .. , 35.56942939758301, 174.8790740966797, UNKNOWN
+train_test_split .. , 23.221969604492188, 198.10104370117188, UNKNOWN
+train_test_split .. , 2392.5304412841797, 2590.6314849853516, UNKNOWN
+train_test_split .. , 195.98650932312012, 2786.6179943084717, UNKNOWN
+patients = pd.read_csv .. & histories = pd.read_csv .., 65.74749946594238, 2852.365493774414, UNKNOWN
+data = patients.merge .. , 44.438838958740234, 2896.8043327331543, UNKNOWN
+complications = data.groupby .. , 28.49411964416504, 2925.2984523773193, UNKNOWN
+data = data.merge(complications .. , 50.62413215637207, 2975.9225845336914, UNKNOWN
+data['label'] = data['complications'] > 1.2 * data['mean_complications'], 49.922943115234375, 3025.845527648926, UNKNOWN
+data = data[['smoker', 'las .. , 41.4423942565918, 3067.2879219055176, UNKNOWN
+train_test_split .. , 52.90985107421875, 3120.1977729797363, UNKNOWN
+train_test_split .. , 2345.994472503662, 5466.192245483398, UNKNOWN
+train_test_split .. , 198.91953468322754, 5665.111780166626, UNKNOWN
+patients = pd.read_csv .. & histories = pd.read_csv .., 27.919530868530273, 27.919530868530273, UNKNOWN
+data = patients.merge .. , 43.65730285644531, 71.57683372497559, UNKNOWN
+complications = data.groupby .. , 11.368036270141602, 82.94486999511719, UNKNOWN
+data = data.merge(complications .. , 40.662288665771484, 123.60715866088867, UNKNOWN
+data['label'] = data['complications'] > 1.2 * data['mean_complications'], 41.59116744995117, 165.19832611083984, UNKNOWN
+data = data[['smoker', 'las .. , 48.654794692993164, 213.853120803833, UNKNOWN
+train_test_split .. , 28.705835342407227, 242.55895614624023, UNKNOWN
+train_test_split .. , 3169.0821647644043, 3411.6411209106445, UNKNOWN
+train_test_split .. , 222.94378280639648, 3634.584903717041, UNKNOWN
+patients = pd.read_csv .. & histories = pd.read_csv .., 66.08104705810547, 3700.6659507751465, UNKNOWN
+data = patients.merge .. , 39.54505920410156, 3740.211009979248, UNKNOWN
+complications = data.groupby .. , 20.816564559936523, 3761.0275745391846, UNKNOWN
+data = data.merge(complications .. , 43.37453842163086, 3804.4021129608154, UNKNOWN
+data['label'] = data['complications'] > 1.2 * data['mean_complications'], 41.47744178771973, 3845.879554748535, UNKNOWN
+data = data[['smoker', 'las .. , 47.16372489929199, 3893.043279647827, UNKNOWN
+train_test_split .. , 48.00844192504883, 3941.051721572876, UNKNOWN
+train_test_split .. , 2534.72900390625, 6475.780725479126, UNKNOWN
+train_test_split .. , 229.3996810913086, 6705.180406570435, UNKNOWN
+patients = pd.read_csv .. & histories = pd.read_csv .., 25.981664657592773, 25.981664657592773, UNKNOWN
+data = patients.merge .. , 34.07549858093262, 60.05716323852539, UNKNOWN
+complications = data.groupby .. , 8.388757705688477, 68.44592094421387, UNKNOWN
+data = data.merge(complications .. , 31.38256072998047, 99.82848167419434, UNKNOWN
+data['label'] = data['complications'] > 1.2 * data['mean_complications'], 32.88078308105469, 132.70926475524902, UNKNOWN
+data = data[['smoker', 'las .. , 38.652658462524414, 171.36192321777344, UNKNOWN
+train_test_split .. , 26.81112289428711, 198.17304611206055, UNKNOWN
+train_test_split .. , 2637.4213695526123, 2835.594415664673, UNKNOWN
+train_test_split .. , 214.7676944732666, 3050.3621101379395, UNKNOWN
+
+###############################
+
+###############################

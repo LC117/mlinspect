@@ -2,20 +2,34 @@
 Instrument and executes the pipeline
 """
 import ast
+import pathlib
 from typing import Iterable, List
 
 import gorilla
+import pandas
 import nbformat
 import networkx
 from astmonkey.transformers import ParentChildNodeTransformer
+import astor  # from astmonkey import visitors -> visitors unfortunately is buggy.
 from nbconvert import PythonExporter
 
+from .. import monkeypatchingSQL
 from .. import monkeypatching
 from ._call_capture_transformer import CallCaptureTransformer
 from .._inspector_result import InspectorResult
 from ..checks._check import Check
 from ..inspections import InspectionResult
 from ..inspections._inspection import Inspection
+
+# to_sql related imports:
+from mlinspect.to_sql._mode import SQLMode, SQLObjRep
+from mlinspect.to_sql.dbms_connectors.dbms_connector import Connector
+from mlinspect.to_sql._sql_logic import SQLLogic
+from mlinspect.to_sql.sql_query_container import SQLQueryContainer
+from mlinspect.to_sql.checks_and_inspections_sql._histogram_for_columns import SQLHistogramForColumns
+from mlinspect.to_sql.py_to_sql_mapping import DfToStringMapping
+from mlinspect.checks._no_bias_introduced_for import NoBiasIntroducedFor
+from mlinspect.to_sql.dbms_connectors.postgresql_connector import PostgresqlConnector
 
 
 class PipelineExecutor:
@@ -38,6 +52,27 @@ class PipelineExecutor:
     inspection_results = InspectionResult(networkx.DiGraph(), dict())
     inspections = []
     custom_monkey_patching = []
+    # to SQL related attributes:
+
+    # user input flags:
+    to_sql = False
+    dbms_connector = None
+
+    # for intern use:
+    pipeline_result = None
+    mapping = None
+    pipeline_container = None
+    update_hist = None
+    sql_logic = None
+    sql_obj = None
+    root_dir_to_sql = pathlib.Path(__file__).resolve().parent.parent / "to_sql/generated_code"
+
+    backup_eq = None
+    backup_ne = None
+    backup_lt = None
+    backup_le = None
+    backup_gt = None
+    backup_ge = None
 
     def run(self, *,
             notebook_path: str or None = None,
@@ -47,12 +82,59 @@ class PipelineExecutor:
             checks: Iterable[Check] or None = None,
             reset_state: bool = True,
             track_code_references: bool = True,
-            custom_monkey_patching: List[any] = None
+            custom_monkey_patching: List[any] = None,
+            to_sql: bool = False,
+            dbms_connector: Connector = None,
+            mode: str = "",
+            materialize: bool = False,
+            row_wise: bool = False
             ) -> InspectorResult:
         """
         Instrument and execute the pipeline and evaluate all checks
         """
         # pylint: disable=too-many-arguments
+
+        # Add all SQL related attributes:
+        self.to_sql = to_sql
+        if self.to_sql:
+
+            if mode not in [r.value for r in SQLObjRep]:
+                raise ValueError("The attribute mode can either be \"CTE\" or \"VIEW\".")
+            if mode == "CTE" and materialize:
+                raise ValueError("Materializing is only available for mode \"VIEW\".")
+
+            self.sql_obj = SQLMode(SQLObjRep.CTE if mode == "CTE" else SQLObjRep.VIEW, materialize)
+
+            self.dbms_connector = dbms_connector
+            if not self.dbms_connector:  # is None
+                print("\nJust translation to SQL is performed! "
+                      "\n-> SQL-Code placed at: mlinspect/to_sql/generated_code.sql\n")
+                self.dbms_connector = PostgresqlConnector(just_code=True, add_mlinspect_serial=row_wise)
+                checks = None
+                inspections = []
+
+            # Empty the "to_sql_output" folder if necessary:
+            [f.unlink() for f in self.root_dir_to_sql.glob("*.sql") if f.is_file()]
+
+            # This mapping allows to keep track of the pandas.DataFrame and pandas.Series w.r.t. to SQL-table repr.!
+            self.mapping = DfToStringMapping()
+            self.pipeline_container = SQLQueryContainer(self.root_dir_to_sql, sql_obj=self.sql_obj)
+            self.update_hist = SQLHistogramForColumns(self.dbms_connector, self.mapping, self.pipeline_container,
+                                                       sql_obj=self.sql_obj)
+            sql_logic_id = 1
+            if self.sql_logic:  # Necessary to avoid duplicate names, when running multiple inspections in a row!
+                sql_logic_id = self.sql_logic.id
+            self.sql_logic = SQLLogic(mapping=self.mapping, pipeline_container=self.pipeline_container,
+                                      dbms_connector=self.dbms_connector, sql_obj=self.sql_obj, id=sql_logic_id)
+
+            # Fix the problem gorilla has with restoring the comparison operators:
+            self.backup_eq = pandas.Series.__eq__
+            self.backup_ne = pandas.Series.__ne__
+            self.backup_lt = pandas.Series.__lt__
+            self.backup_le = pandas.Series.__le__
+            self.backup_gt = pandas.Series.__gt__
+            self.backup_ge = pandas.Series.__ge__
+
         if reset_state:
             # reset_state=False should only be used internally for performance experiments etc!
             # It does not ensure the same inspections are still used as args etc.
@@ -66,17 +148,27 @@ class PipelineExecutor:
             custom_monkey_patching = []
 
         check_inspections = set()
+
         for check in checks:
             check_inspections.update(check.required_inspections)
+            if isinstance(check, NoBiasIntroducedFor) and self.to_sql:
+                check._to_sql = self.to_sql
+                check.mapping = self.mapping
+                check.pipeline_container = self.pipeline_container
+                check.dbms_connector = self.dbms_connector
+                check.sql_obj = self.sql_obj
+
         all_inspections = list(set(inspections).union(check_inspections))
         self.inspections = all_inspections
         self.track_code_references = track_code_references
         self.custom_monkey_patching = custom_monkey_patching
 
+        # Here the modified code is created and run:
         self.run_inspections(notebook_path, python_code, python_path)
-        check_to_results = dict((check, check.evaluate(self.inspection_results)) for check in checks)
+        check_to_results = dict(
+            (check, check.evaluate(self.inspection_results)) for check in checks)
         return InspectorResult(self.inspection_results.dag, self.inspection_results.dag_node_to_inspection_results,
-                               check_to_results)
+                               check_to_results, to_sql_pipe_result=self.pipeline_result)
 
     def run_inspections(self, notebook_path, python_code, python_path):
         """
@@ -85,8 +177,13 @@ class PipelineExecutor:
         # pylint: disable=no-self-use, too-many-locals
         self.source_code, self.source_code_path = self.load_source_code(notebook_path, python_path, python_code)
         parsed_ast = ast.parse(self.source_code)
+
         parsed_modified_ast = self.instrument_pipeline(parsed_ast, self.track_code_references)
-        exec(compile(parsed_modified_ast, filename=self.source_code_path, mode="exec"), PipelineExecutor.script_scope)
+
+        modified_code = astor.to_source(parsed_modified_ast)
+        # Do the monkey patching and the inspection:
+        exec(compile(modified_code, filename=self.source_code_path, mode="exec"), PipelineExecutor.script_scope)
+        return
 
     def get_next_op_id(self):
         """
@@ -123,6 +220,19 @@ class PipelineExecutor:
         self.inspections = []
         self.custom_monkey_patching = []
 
+        # to_sql related reset:
+        if self.to_sql:
+            [f.unlink() for f in self.root_dir_to_sql.glob("*.sql") if f.is_file()]
+            self.mapping = DfToStringMapping()
+            self.pipeline_container = SQLQueryContainer(self.root_dir_to_sql, sql_obj=self.sql_obj)
+            self.update_hist = SQLHistogramForColumns(self.dbms_connector, self.mapping, self.pipeline_container,
+                                                       sql_obj=self.sql_obj)
+            sql_logic_id = 1
+            if self.sql_logic:  # Necessary to avoid duplicate names, when running multiple inspections in a row!
+                sql_logic_id = self.sql_logic.id
+            self.sql_logic = SQLLogic(mapping=self.mapping, pipeline_container=self.pipeline_container,
+                                      dbms_connector=self.dbms_connector, sql_obj=self.sql_obj, id=sql_logic_id)
+
     @staticmethod
     def instrument_pipeline(parsed_ast, track_code_references):
         """
@@ -130,7 +240,7 @@ class PipelineExecutor:
         """
         # insert set_code_reference calls
         if track_code_references:
-            # Needed to get the parent assign node for subscript assigns.
+            #  Needed to get the parent assign node for subscript assigns.
             #  Without this, "pandas_df['baz'] = baz + 1" would only be "pandas_df['baz']"
             parent_child_transformer = ParentChildNodeTransformer()
             parsed_ast = parent_child_transformer.visit(parsed_ast)
@@ -185,8 +295,6 @@ class PipelineExecutor:
         return source_code, source_code_path
 
 
-# How we instrument the calls
-
 # This instance works as our singleton: we avoid to pass the class instance to the instrumented
 # pipeline. This keeps the DAG nodes to be inserted very simple.
 singleton = PipelineExecutor()
@@ -235,11 +343,22 @@ def undo_monkey_patch():
     for patch in patches:
         gorilla.revert(patch)
 
+    # Fix the problem gorilla has with restoring the comparison operators:
+    if singleton.to_sql:
+        pandas.Series.__eq__ = singleton.backup_eq
+        pandas.Series.__ne__ = singleton.backup_ne
+        pandas.Series.__lt__ = singleton.backup_lt
+        pandas.Series.__le__ = singleton.backup_le
+        pandas.Series.__gt__ = singleton.backup_gt
+        pandas.Series.__ge__ = singleton.backup_ge
+
 
 def get_monkey_patching_patch_sources():
     """
     Get monkey patches provided by mlinspect and custom patches provided by the user
     """
     patch_sources = [monkeypatching]
+    if singleton.to_sql:
+        patch_sources = [monkeypatchingSQL]
     patch_sources.extend(singleton.custom_monkey_patching)
     return patch_sources

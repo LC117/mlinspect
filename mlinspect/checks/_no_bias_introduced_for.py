@@ -6,6 +6,8 @@ from __future__ import annotations
 import dataclasses
 from typing import Iterable, Dict
 import collections
+
+import pandas
 from matplotlib import pyplot
 from pandas import DataFrame
 
@@ -15,6 +17,7 @@ from mlinspect.inspections._inspection import Inspection
 from mlinspect.inspections._inspection_input import OperatorType, FunctionInfo
 from mlinspect.instrumentation._dag_node import DagNode
 from mlinspect.inspections._inspection_result import InspectionResult
+from mlinspect.to_sql._mode import SQLObjRep
 
 
 @dataclasses.dataclass(eq=False, frozen=True)
@@ -69,12 +72,14 @@ class NoBiasIntroducedFor(Check):
         # pylint: disable=too-many-locals
         dag = inspection_result.dag
         histograms = {}
-        for dag_node, inspection_results in inspection_result.dag_node_to_inspection_results.items():
-            histograms[dag_node] = inspection_results[HistogramForColumns(self.sensitive_columns)]
         relevant_nodes = [node for node in dag.nodes if node.operator_info.operator in {OperatorType.JOIN,
                                                                                         OperatorType.SELECTION} or
                           (node.operator_info.function_info == FunctionInfo('sklearn.impute._base', 'SimpleImputer')
                            and set(node.details.columns).intersection(self.sensitive_columns))]
+
+        for dag_node, inspection_results in inspection_result.dag_node_to_inspection_results.items():
+            histograms[dag_node] = inspection_results[HistogramForColumns(self.sensitive_columns)]
+
         check_status = CheckStatus.SUCCESS
         bias_distribution_change = collections.OrderedDict()
         issue_list = []
@@ -104,6 +109,9 @@ class NoBiasIntroducedFor(Check):
         Compute histograms for a dag node like a join and a concrete sensitive column like race
         """
         # pylint: disable=too-many-locals, too-many-arguments
+        if hasattr(self, "_to_sql"):
+            column = f"\"{column}\""
+
         after_map = histograms[node][column]
         after_df = DataFrame(after_map.items(), columns=["sensitive_column_value", "count_after"])
 
